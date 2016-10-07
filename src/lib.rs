@@ -1,4 +1,4 @@
-#![crate_name = "pidfile"]
+#![crate_name = "pidfile_old"]
 
 extern crate libc;
 extern crate nix;

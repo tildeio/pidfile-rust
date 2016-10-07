@@ -1,12 +1,10 @@
 [package]
 
-name = "pidfile"
+name = "pidfile_old"
 version = "0.1.0"
 authors = ["Carl Lerche <me@carllerche.com>"]
 
 [dependencies]
 log = "0.3.0"
 libc = "0.1.6"
-
-[dependencies.nix]
-git = "https://github.com/carllerche/nix-rust"
+nix = "0.4.3"
