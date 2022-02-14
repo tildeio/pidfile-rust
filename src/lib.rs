@@ -43,17 +43,17 @@ pub struct Request {
 impl Request {
     pub fn lock(self) -> LockResult<Lock> {
         let res = File::open(&*self.path, true, true, self.perm);
-        let mut f = try!(res.map_err(LockError::io_error));
+        let mut f = res.map_err(LockError::io_error)?;
 
-        if !try!(f.lock().map_err(LockError::io_error)) {
+        if !f.lock().map_err(LockError::io_error)? {
             debug!("lock not acquired; conflict");
             return Err(LockError::conflict());
         }
 
         debug!("lock acquired");
 
-        try!(f.truncate().map_err(LockError::io_error));
-        try!(f.write(self.pid).map_err(LockError::io_error));
+        f.truncate().map_err(LockError::io_error)?;
+        f.write(self.pid).map_err(LockError::io_error)?;
 
         debug!("lockfile written");
 
@@ -82,7 +82,7 @@ impl Request {
             }
         };
 
-        let pid = try!(f.check());
+        let pid = f.check()?;
 
         if pid == 0 {
             debug!("no lock acquired -- file exists");
@@ -139,7 +139,7 @@ impl Lock {
             Ok(stat) => stat
         };
 
-        let path_stat = try!(stat(&*self.path).map_err(|_| None));
+        let path_stat = stat(&*self.path).map_err(|_| None)?;
 
         if current_stat.st_ino == path_stat.st_ino {
             Ok(())

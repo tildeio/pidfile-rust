@@ -1,29 +1,22 @@
 #![allow(non_camel_case_types)]
 
-use std::{io, mem};
-use std::io::Write;
-use std::path::Path;
-use std::os::unix::ffi::OsStrExt;
+use ffi::{flock, FD_CLOEXEC, F_GETLK, F_SETFD, F_SETLK, F_UNLCK, F_WRLCK};
 use libc;
-use libc::{
-    c_void, c_int, c_short, pid_t, mode_t, size_t,
-    O_CREAT, O_WRONLY, SEEK_SET, EINTR, EACCES, EAGAIN
-};
+use libc::{c_int, c_short, c_void, mode_t, pid_t, size_t, EACCES, EAGAIN, EINTR, SEEK_SET};
 use nix;
-use nix::errno::{Errno, errno};
+use nix::errno::{errno, Errno};
 use nix::fcntl::{self, open};
 use nix::sys::stat;
-use ffi::{
-    flock, O_SYNC, F_SETFD, F_GETLK,
-    F_SETLK, F_WRLCK, F_UNLCK, FD_CLOEXEC
-};
+use std::io::Write;
+use std::path::Path;
+use std::{io, mem};
 
 pub struct File {
-    fd: c_int
+    fd: c_int,
 }
 
 macro_rules! check {
-    ($expr:expr) => ({
+    ($expr:expr) => {{
         let mut ret;
 
         loop {
@@ -40,23 +33,22 @@ macro_rules! check {
                     continue;
                 }
 
-                return Err(from_raw_os_error(err));
-            }
-            else {
+                return Err(io::Error::from_raw_os_error(err));
+            } else {
                 break;
             }
         }
 
         ret
-    })
+    }};
 }
 
 macro_rules! nix_check {
-    ($expr:expr) => ({
-        let mut ret;
+    ($expr:expr) => {{
+        let ret;
 
         loop {
-            let res = unsafe { $expr };
+            let res = $expr;
 
             debug!("ffi; expr={}; success={}", stringify!($expr), res.is_ok());
 
@@ -70,13 +62,13 @@ macro_rules! nix_check {
                         continue;
                     }
 
-                    return Err(from_raw_os_error(e.errno() as c_int));
+                    return Err(io::Error::from_raw_os_error(e.errno() as c_int));
                 }
             }
         }
 
         ret
-    })
+    }};
 }
 
 unsafe fn setlk(fd: c_int, fl: &flock) -> c_int {
@@ -96,11 +88,19 @@ impl File {
     pub fn open(path: &Path, create: bool, write: bool, mode: u32) -> io::Result<File> {
         let mut flags = fcntl::O_SYNC;
 
-        if create { flags = flags | fcntl::O_CREAT;  }
-        if write  { flags = flags | fcntl::O_WRONLY; }
+        if create {
+            flags = flags | fcntl::O_CREAT;
+        }
+        if write {
+            flags = flags | fcntl::O_WRONLY;
+        }
 
         // Open the file descriptor
-        let fd = nix_check!(open(path, flags, stat::Mode::from_bits(mode as mode_t).unwrap()));
+        let fd = nix_check!(open(
+            path,
+            flags,
+            stat::Mode::from_bits(mode as mode_t).unwrap()
+        ));
 
         // Set to close on exec
         check!(libc::fcntl(fd, F_SETFD, FD_CLOEXEC));
@@ -134,8 +134,7 @@ impl File {
 
         if fl.l_type == F_UNLCK {
             Ok(0)
-        }
-        else {
+        } else {
             Ok(fl.l_pid)
         }
     }
@@ -146,7 +145,7 @@ impl File {
         let len = {
             let mut reader = io::Cursor::new(&mut buf[..]);
 
-            try!(write!(&mut reader, "{}\n", pid));
+            write!(&mut reader, "{}\n", pid)?;
             reader.position()
         };
 
@@ -154,7 +153,11 @@ impl File {
 
         while pos < len {
             let ptr = unsafe { buf.as_ptr().offset(pos as isize) };
-            let ret = check!(libc::write(self.fd, ptr as *const c_void, (len - pos) as size_t));
+            let ret = check!(libc::write(
+                self.fd,
+                ptr as *const c_void,
+                (len - pos) as size_t
+            ));
             pos += ret as u64;
         }
 
@@ -169,21 +172,8 @@ impl File {
 impl Drop for File {
     fn drop(&mut self) {
         debug!("closing file");
-        unsafe { libc::close(self.fd); }
-    }
-}
-
-fn from_raw_os_error(err: i32) -> io::Error {
-    use std::mem;
-    // TODO: Remove insane hacks once `std::io::Error::from_os_error` lands
-    //       rust-lang/rust#24028
-    #[allow(dead_code)]
-    enum Repr {
-        Os(i32),
-        Custom(*const ()),
-    }
-
-    unsafe {
-        mem::transmute(Repr::Os(err))
+        unsafe {
+            libc::close(self.fd);
+        }
     }
 }
