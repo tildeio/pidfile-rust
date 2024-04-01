@@ -5,6 +5,6 @@ version = "0.1.0"
 authors = ["Carl Lerche <me@carllerche.com>"]
 
 [dependencies]
-log = "0.3.0"
+log = "*"
 libc = "0.2.0"
 nix = "0.7.0"
